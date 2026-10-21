@@ -1,4 +1,4 @@
-const BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+export const API_BASE_URL = '/api';
 const TIEMPO_VERIFICACION_MS = 10 * 60 * 1000;
 const TIEMPO_NORMAL_MS = 60 * 1000;
 
@@ -48,11 +48,11 @@ async function solicitar(ruta, { metodo = 'GET', cuerpo, json, tiempo = TIEMPO_N
 
   let respuesta;
   try {
-    respuesta = await fetch(`${BASE}${ruta}`, {
+    respuesta = await fetch(`${API_BASE_URL}${ruta}`, {
       method: metodo,
       headers: encabezados,
       body,
-      credentials: BASE ? 'include' : 'same-origin',
+      credentials: 'include',
       signal: controlador.signal,
       cache: 'no-store',
     });
@@ -83,14 +83,14 @@ async function solicitar(ruta, { metodo = 'GET', cuerpo, json, tiempo = TIEMPO_N
 }
 
 export async function obtenerCsrf() {
-  const datos = await solicitar('/api/auth/csrf');
+  const datos = await solicitar('/auth/csrf');
   tokenCsrf = datos.csrf;
   return tokenCsrf;
 }
 
 export async function consultarSesion() {
   try {
-    return await solicitar('/api/auth/session');
+    return await solicitar('/auth/session');
   } catch (error) {
     if (error.estado === 401) return { autenticado: false };
     throw error;
@@ -99,25 +99,25 @@ export async function consultarSesion() {
 
 export async function iniciarSesion(usuario, password) {
   if (!tokenCsrf) await obtenerCsrf();
-  return solicitar('/api/auth/login', { metodo: 'POST', json: { usuario, password } });
+  return solicitar('/auth/login', { metodo: 'POST', json: { usuario, password } });
 }
 
 export async function cerrarSesion() {
-  return solicitar('/api/auth/logout', { metodo: 'POST' });
+  return solicitar('/auth/logout', { metodo: 'POST' });
 }
 
 export async function verificarDocumentos(archivos) {
   const formulario = new FormData();
   for (const archivo of archivos) formulario.append('documentos', archivo, archivo.name);
-  return solicitar('/api/verificar', { metodo: 'POST', cuerpo: formulario, tiempo: TIEMPO_VERIFICACION_MS });
+  return solicitar('/verificar', { metodo: 'POST', cuerpo: formulario, tiempo: TIEMPO_VERIFICACION_MS });
 }
 
 export async function nuevaVerificacion() {
-  return solicitar('/api/nueva', { metodo: 'POST' });
+  return solicitar('/nueva', { metodo: 'POST' });
 }
 
 export async function descargarReporte(reporteId, nombreArchivo) {
-  const respuesta = await solicitar(`/api/descargar/${encodeURIComponent(reporteId)}`, { comoBlob: true });
+  const respuesta = await solicitar(`/descargar/${encodeURIComponent(reporteId)}`, { comoBlob: true });
   const blob = await respuesta.blob();
   const url = URL.createObjectURL(blob);
   const enlace = document.createElement('a');
