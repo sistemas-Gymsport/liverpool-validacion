@@ -1,29 +1,19 @@
 import { crearLogo } from '../components/logo.js';
-import { crearAviso, crearBoton, crearCargando, ponerCargando } from '../components/ui.js';
+import { crearAviso, crearBoton, crearCargando } from '../components/ui.js';
 import { crearZonaArchivos } from '../components/zonaArchivos.js';
 import { descargarReporte, nuevaVerificacion, verificarDocumentos } from '../services/api.js';
 import { el, montar } from '../utils/dom.js';
 import { excedeTotal, LIMITES, tipoPorExtension } from '../utils/validacion.js';
 import { crearResultados } from './resultados.js';
 
-export function crearPaginaVerificador({ usuario, alCerrarSesion }) {
+export function crearPaginaVerificador() {
   const contenido = el('div', { class: 'contenido' });
   let procesando = false;
-
-  const botonSalir = crearBoton('Cerrar sesión', { variante: 'fantasma' });
-  botonSalir.addEventListener('click', async () => {
-    if (procesando) return;
-    ponerCargando(botonSalir, true, 'Cerrando…');
-    await alCerrarSesion();
-  });
 
   const encabezado = el('header', { class: 'encabezado' },
     el('div', { class: 'encabezado__marca' },
       crearLogo({ claro: true, alto: 34 }),
-      el('h1', { class: 'encabezado__titulo', text: 'Verificador de pedidos Liverpool – Gymsport' })),
-    el('div', { class: 'encabezado__usuario' },
-      el('span', { class: 'encabezado__nombre' }, el('span', { class: 'oculto-visual', text: 'Usuario conectado: ' }), usuario),
-      botonSalir));
+      el('h1', { class: 'encabezado__titulo', text: 'Verificador de pedidos Liverpool – Gymsport' })));
 
   function crearPasos() {
     const paso = (numero, titulo, texto) => el('li', { class: 'paso' },
@@ -62,7 +52,6 @@ export function crearPaginaVerificador({ usuario, alCerrarSesion }) {
     botonVerificar.addEventListener('click', async () => {
       if (procesando || botonVerificar.disabled) return;
       procesando = true;
-      botonSalir.disabled = true;
       const archivos = zona.obtener().map((e) => e.archivo);
       montar(contenido, el('div', { class: 'tarjeta procesando' },
         crearCargando('Verificando pedidos...'),
@@ -71,12 +60,9 @@ export function crearPaginaVerificador({ usuario, alCerrarSesion }) {
         const datos = await verificarDocumentos(archivos);
         pantallaResultados(datos);
       } catch (error) {
-        if (error.estado !== 401) {
-          pantallaSubida(crearAviso('error', error.message, 'No se pudo verificar:'));
-        }
+        pantallaSubida(crearAviso('error', error.message, 'No se pudo verificar:'));
       } finally {
         procesando = false;
-        botonSalir.disabled = false;
       }
     });
 
@@ -98,8 +84,8 @@ export function crearPaginaVerificador({ usuario, alCerrarSesion }) {
         try {
           await nuevaVerificacion();
           pantallaSubida();
-        } catch (error) {
-          if (error.estado !== 401) pantallaSubida(crearAviso('revisar', 'Se limpió la pantalla, pero el servidor no confirmó la eliminación del reporte anterior. Caducará automáticamente en una hora.'));
+        } catch {
+          pantallaSubida(crearAviso('revisar', 'Se limpió la pantalla, pero el servidor no confirmó la eliminación del reporte anterior. Caducará automáticamente en una hora.'));
         }
       },
     }));

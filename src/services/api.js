@@ -2,8 +2,13 @@ export const API_BASE_URL = '/api';
 const TIEMPO_VERIFICACION_MS = 10 * 60 * 1000;
 const TIEMPO_NORMAL_MS = 60 * 1000;
 
+const ACCESO = {
+  usuario: import.meta.env.VITE_ACCESO_USUARIO || '',
+  password: import.meta.env.VITE_ACCESO_PASSWORD || '',
+};
+
 let tokenCsrf = '';
-let alExpirarSesion = () => {};
+let sesionEnCurso = null;
 
 export class ErrorApi extends Error {
   constructor(mensaje, { estado = 0, codigo = 'error' } = {}) {
@@ -11,10 +16,6 @@ export class ErrorApi extends Error {
     this.estado = estado;
     this.codigo = codigo;
   }
-}
-
-export function configurarSesionExpirada(callback) {
-  alExpirarSesion = callback;
 }
 
 function mensajePorEstado(estado) {
@@ -35,7 +36,10 @@ async function leerJson(respuesta) {
   }
 }
 
-async function solicitar(ruta, { metodo = 'GET', cuerpo, json, tiempo = TIEMPO_NORMAL_MS, reintentarCsrf = true, comoBlob = false } = {}) {
+async function solicitar(ruta, opciones = {}) {
+  const {
+    metodo = 'GET', cuerpo, json, tiempo = TIEMPO_NORMAL_MS, reintentarCsrf = true, renovarSesion = true, comoBlob = false,
+  } = opciones;
   const controlador = new AbortController();
   const temporizador = setTimeout(() => controlador.abort(), tiempo);
   const encabezados = {};
@@ -72,38 +76,49 @@ async function solicitar(ruta, { metodo = 'GET', cuerpo, json, tiempo = TIEMPO_N
 
   if (respuesta.status === 403 && datos?.codigo === 'csrf' && reintentarCsrf) {
     await obtenerCsrf();
-    return solicitar(ruta, { metodo, cuerpo, json, tiempo, reintentarCsrf: false, comoBlob });
+    return solicitar(ruta, { ...opciones, reintentarCsrf: false });
   }
-  const error = new ErrorApi(datos?.error || mensajePorEstado(respuesta.status), {
+  if (respuesta.status === 401 && datos?.codigo === 'sesion_requerida' && renovarSesion) {
+    await abrirSesion();
+    return solicitar(ruta, { ...opciones, renovarSesion: false });
+  }
+  throw new ErrorApi(datos?.error || mensajePorEstado(respuesta.status), {
     estado: respuesta.status,
     codigo: datos?.codigo || 'http',
   });
-  if (respuesta.status === 401 && datos?.codigo === 'sesion_requerida') alExpirarSesion(error.message);
-  throw error;
 }
 
-export async function obtenerCsrf() {
+async function obtenerCsrf() {
   const datos = await solicitar('/auth/csrf');
   tokenCsrf = datos.csrf;
   return tokenCsrf;
 }
 
-export async function consultarSesion() {
-  try {
-    return await solicitar('/auth/session');
-  } catch (error) {
-    if (error.estado === 401) return { autenticado: false };
-    throw error;
+async function iniciarSesionAutomatica() {
+  if (!ACCESO.usuario || !ACCESO.password) {
+    throw new ErrorApi('El acceso automático no está configurado (VITE_ACCESO_USUARIO y VITE_ACCESO_PASSWORD).', { codigo: 'configuracion' });
   }
+  await obtenerCsrf();
+  return solicitar('/auth/login', {
+    metodo: 'POST', json: { usuario: ACCESO.usuario, password: ACCESO.password }, renovarSesion: false,
+  });
 }
 
-export async function iniciarSesion(usuario, password) {
-  if (!tokenCsrf) await obtenerCsrf();
-  return solicitar('/auth/login', { metodo: 'POST', json: { usuario, password } });
+function abrirSesion() {
+  if (!sesionEnCurso) {
+    sesionEnCurso = iniciarSesionAutomatica().finally(() => { sesionEnCurso = null; });
+  }
+  return sesionEnCurso;
 }
 
-export async function cerrarSesion() {
-  return solicitar('/auth/logout', { metodo: 'POST' });
+export async function asegurarSesion() {
+  try {
+    const sesion = await solicitar('/auth/session', { renovarSesion: false });
+    if (sesion.autenticado) return sesion;
+  } catch (error) {
+    if (error.estado !== 401) throw error;
+  }
+  return abrirSesion();
 }
 
 export async function verificarDocumentos(archivos) {
