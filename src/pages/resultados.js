@@ -8,26 +8,15 @@ const TARJETAS = [
   ['verificados', 'En revisión', 'neutra'],
   ['correctos', 'Correctos', 'correcto'],
   ['errores', 'Errores', 'error'],
-  ['revisar', 'Para revisar', 'revisar'],
-  ['sin_picking', 'Sin picking', 'info'],
-  ['guias_por_revisar', 'Paquetes por revisar', 'revisar'],
 ];
 
 const ORIGENES = [['', 'Todas'], ['Excel', 'Primera · Excel'], ['Picking', 'Segunda · Picking'], ['Guías de envío', 'Segunda · Guías de envío']];
 
-function crearBanner(resumen, advertencias) {
+function crearBanner(resumen) {
   if (resumen.errores > 0) {
     return el('div', { class: 'banner banner--error', role: 'alert' },
       el('span', { class: 'banner__icono', 'aria-hidden': 'true', text: '⚠️' }),
       el('span', { text: `Se encontraron ${plural(resumen.errores, 'error', 'errores')}. No surtas los pedidos marcados hasta corregirlos.` }));
-  }
-  if (resumen.revisar > 0 || advertencias.length > 0) {
-    const partes = [];
-    if (resumen.revisar) partes.push(plural(resumen.revisar, 'elemento para revisar', 'elementos para revisar'));
-    if (advertencias.length) partes.push(plural(advertencias.length, 'advertencia', 'advertencias'));
-    return el('div', { class: 'banner banner--revisar', role: 'status' },
-      el('span', { class: 'banner__icono', 'aria-hidden': 'true', text: '🔎' }),
-      el('span', { text: `Sin errores, pero hay ${partes.join(' y ')}. Revísalos antes de surtir.` }));
   }
   return el('div', { class: 'banner banner--correcto', role: 'status' },
     el('span', { class: 'banner__icono', 'aria-hidden': 'true', text: '✅' }),
@@ -50,7 +39,7 @@ function crearSelect(id, etiqueta, opciones, alCambiar) {
 }
 
 function crearFiltroNivel(id, alCambiar) {
-  return crearSelect(id, 'Nivel', [['', 'Todos'], ['ERROR', 'Errores'], ['REVISAR', 'Para revisar'], ['CORRECTO', 'Correctos']], alCambiar);
+  return crearSelect(id, 'Nivel', [['', 'Todos'], ['ERROR', 'Errores'], ['CORRECTO', 'Correctos']], alCambiar);
 }
 
 function crearSeccion(titulo, controles, ...contenido) {
@@ -214,34 +203,8 @@ function seccionPaquetes(guias, medidasCargadas, guiasEnvio) {
   aplicar();
   return crearSeccion('Guías, pesos y medidas registrados en Liverpool',
     el('div', { class: 'seccion__controles' }, ...controles),
-    el('p', { class: 'seccion__nota', text: 'Liverpool baja un renglón por producto y repite los paquetes de todo el pedido; aquí se leen una vez por pedido. Sus valores pueden venir incompletos o genéricos (10 cm, 1 kg) y se validan contra la tabla de medidas y las reglas de empaque: hasta 30 kg por guía al agrupar, piso de dos en dos y una guía por pieza en pesas de 17 kg o más. «Parcial» indica que falta el peso de referencia de algún producto.' }),
+    el('p', { class: 'seccion__nota', text: 'Liverpool baja un renglón por producto y repite los paquetes de todo el pedido; aquí se leen una vez por pedido. Se comparan contra la tabla de medidas, las guías de envío y las reglas de empaque (si Liverpool no tiene el dato o trae valores genéricos de 10 cm y 1 kg, no se compara): hasta 30 kg por guía al agrupar, piso de dos en dos y una guía por pieza en pesas de 17 kg o más. «Parcial» indica que falta el peso de referencia de algún producto.' }),
     medidasCargadas ? null : crearAviso('info', 'No se cargó la tabla de medidas de equipos: solo se aplicaron las reglas de empaque.'),
-    tabla.elemento);
-}
-
-function seccionSinPicking(pendientes) {
-  const tabla = crearTabla({
-    etiqueta: 'Pedidos sin picking',
-    textoVacio: 'Todos los pedidos de Liverpool aparecen en los picking revisados.',
-    columnas: [
-      { titulo: 'Fecha límite de envío', valor: (s) => s.fecha_limite, clase: 'sin-salto' },
-      { titulo: 'Pedido', valor: (s) => s.pedido, clase: 'monoespaciado' },
-      { titulo: 'SKU', valor: (s) => s.sku, clase: 'monoespaciado sin-salto' },
-      { titulo: 'Cant.', valor: (s) => s.cantidad, clase: 'numero' },
-      { titulo: 'Cliente', valor: (s) => s.cliente, clase: 'texto-medio' },
-      { titulo: 'Producto', valor: (s) => s.producto, clase: 'texto-medio' },
-      { titulo: 'Estado', valor: (s) => s.estado, clase: 'sin-salto' },
-      { titulo: 'Envío', valor: (s) => s.envio, clase: 'sin-salto' },
-      { titulo: 'Observación', valor: (s) => s.observacion, clase: 'texto-medio' },
-    ],
-  });
-  tabla.actualizar(pendientes);
-  const pedidos = new Set(pendientes.map((s) => s.pedido)).size;
-  return el('details', { class: 'tarjeta seccion plegable' },
-    el('summary', {},
-      el('h3', { text: 'Pedidos sin picking' }),
-      el('span', { class: 'plegable__conteo', text: `${plural(pedidos, 'pedido')} · ordenados por fecha límite de envío` })),
-    el('p', { class: 'seccion__nota', text: 'Información para operaciones: estos pedidos no aparecen en ninguno de los picking revisados.' }),
     tabla.elemento);
 }
 
@@ -271,7 +234,6 @@ export function crearResultados(datos, { alDescargar, alNueva }) {
   const segunda = [];
   if (datos.picking_cargado) segunda.push(seccionDetalle(datos.detalle_pedidos));
   if (datos.guias_envio_cargadas) segunda.push(seccionEtiquetas(datos.etiquetas || []));
-  if (datos.picking_cargado) segunda.push(seccionSinPicking(datos.pedidos_sin_picking));
   if (!segunda.length) {
     segunda.push(crearAviso('info', 'No se cargaron PDF de picking ni de guías de envío. Súbelos en una nueva verificación para hacer la segunda revisión.'));
   } else if (!datos.picking_cargado) {
@@ -284,10 +246,10 @@ export function crearResultados(datos, { alDescargar, alNueva }) {
     el('div', { class: 'resultados__cabecera' },
       el('h2', { text: 'Resultado de la verificación' }),
       el('p', { class: 'resultados__meta', text: `Generado el ${datos.generado}` })),
-    crearBanner(datos.resumen, advertencias),
+    crearBanner(datos.resumen),
     crearTarjetas(datos.resumen),
     advertencias.length
-      ? el('div', { class: 'advertencias' }, advertencias.map((a) => crearAviso('revisar', a, 'Advertencia:')))
+      ? el('div', { class: 'advertencias' }, advertencias.map((a) => crearAviso('info', a, 'Aviso:')))
       : null,
     seccionDocumentos(datos.documentos || []),
     el('div', { class: 'acciones' }, botonDescargar, botonNueva, avisoAcciones),
